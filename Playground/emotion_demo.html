@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Emotion Animation Test</title>
+        <style>
+            body {
+                margin: 0;
+                background: #111;
+                color: #fff;
+                font-family: sans-serif;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+            canvas {
+                margin-top: 20px;
+                background: #222;
+                border: 1px solid #333;
+            }
+            .controls {
+                margin-top: 10px;
+            }
+            button {
+                margin: 5px;
+                padding: 10px 20px;
+                border-radius: 8px;
+                border: none;
+                background: #333;
+                color: white;
+                cursor: pointer;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Emotion Animation Test</h1>
+        <canvas id="emotionCanvas" width="600" height="300"></canvas>
+        <div class="controls">
+            <button onclick="setEmotion('neutral')">Neutral</button>
+            <button onclick="setEmotion('happy')">Happy</button>
+            <button onclick="setEmotion('angry')">Angry</button>
+            <button onclick="setEmotion('surprised')">Surprised</button>
+            <button onclick="setEmotion('love')">Love</button>
+        </div>
+        <script type="module">
+            /**
+             * Linear interpolation between two numbers. When t = 0, returns a;
+             * when t = 1, returns b.
+             */
+            function lerp(a, b, t) {
+                return a + (b - a) * t;
+            }
+
+            /**
+             * Convert a CSS hex colour string to an RGB object. Accepts both
+             * 3‑ and 6‑digit hex codes.
+             */
+            function hexToRgb(hex) {
+                let cleaned = hex.replace('#', '').trim();
+                if (cleaned.length === 3) {
+                    cleaned = cleaned[0] + cleaned[0] + cleaned[1] + cleaned[1] + cleaned[2] + cleaned[2];
+                }
+                const num = parseInt(cleaned, 16);
+                return {
+                    r: (num >> 16) & 255,
+                    g: (num >> 8) & 255,
+                    b: num & 255,
+                };
+            }
+
+            /**
+             * Interpolate between two RGB colours. Each channel is interpolated
+             * independently and rounded to the nearest integer.
+             */
+            function lerpColor(c1, c2, t) {
+                return {
+                    r: Math.round(lerp(c1.r, c2.r, t)),
+                    g: Math.round(lerp(c1.g, c2.g, t)),
+                    b: Math.round(lerp(c1.b, c2.b, t)),
+                };
+            }
+
+            /**
+             * Resample a closed polyline to a fixed number of points. Ensures
+             * consistency across shapes when interpolating between frames.
+             */
+            function resamplePoints(points, count) {
+                if (points.length === count) {
+                    return points.map((p) => ({ x: p.x, y: p.y }));
+                }
+                const closed = points.concat([points[0]]);
+                const segLengths = [];
+                let total = 0;
+                for (let i = 0; i < closed.length - 1; i++) {
+                    const dx = closed[i + 1].x - closed[i].x;
+                    const dy = closed[i + 1].y - closed[i].y;
+                    const len = Math.hypot(dx, dy);
+                    segLengths.push(len);
+                    total += len;
+                }
+                const out = [];
+                for (let i = 0; i < count; i++) {
+                    const dist = (i / count) * total;
+                    let accum = 0;
+                    let seg = 0;
+                    while (seg < segLengths.length && accum + segLengths[seg] < dist) {
+                        accum += segLengths[seg];
+                        seg++;
+                    }
+                    const segDist = dist - accum;
+                    const segLen = segLengths[seg] || 1;
+                    const t = segLen > 0 ? segDist / segLen : 0;
+                    const p0 = closed[seg];
+                    const p1 = closed[seg + 1];
+                    out.push({ x: lerp(p0.x, p1.x, t), y: lerp(p0.y, p1.y, t) });
+                }
+                return out;
+            }
+
+            /**
+             * Compute the centroid of a shape. A shape is defined by a position
+             * and an array of vertices in local coordinates.
+             */
+            function centroid(shape) {
+                let cx = 0;
+                let cy = 0;
+                const n = shape.vertices.length;
+                for (const p of shape.vertices) {
+                    cx += p.x + shape.pos.x;
+                    cy += p.y + shape.pos.y;
+                }
+                return { x: cx / n, y: cy / n };
+            }
+
+            /**
+             * A class that manages multiple eye‑like shapes and performs
+             * smooth morphing between different emotions. When switching
+             * emotions the nearest shapes are matched greedily to produce
+             * organic transitions even when the number of shapes differs.
+             */
+            class EmotionSystem {
+                constructor(ctx, animations, initialEmotion, unifyCount = 64) {
+                    this.ctx = ctx;
+                    this.animations = {};
+                    this.emotionColours = {};
+                    this.currentEmotion = initialEmotion;
+                    this.targetEmotion = null;
+                    this.morphing = false;
+                    this.morphStartTime = 0;
+                    this.MORPH_DURATION = 400;
+                    this.startShapes = null;
+                    this.startColour = null;
+                    this.targetColour = null;
+                    this.startPairs = null;
+                    this.cycleStartTime = performance.now();
+                    this.shapesToDraw = [];
+                    this.unifyCount = unifyCount;
+                    // Preprocess animations: resample all vertices to unifyCount and store base colours
+                    for (const key of Object.keys(animations)) {
+                        const anim = animations[key];
+                        const processedFrames = [];
+                        let baseColour = null;
+                        for (const frame of anim.frames) {
+                            const newShapes = [];
+                            for (const shape of frame.shapes) {
+                                if (!baseColour) {
+                                    baseColour = hexToRgb(shape.color);
+                                }
+                                const resampledVerts = resamplePoints(shape.vertices, this.unifyCount);
+                                newShapes.push({
+                                    pos: { x: shape.pos.x, y: shape.pos.y },
+                                    vertices: resampledVerts,
+                                    color: shape.color,
+                                });
+                            }
+                            processedFrames.push({ shapes: newShapes, duration: frame.duration });
+                        }
+                        this.animations[key] = { frames: processedFrames };
+                        this.emotionColours[key] = baseColour || { r: 255, g: 255, b: 255 };
+                    }
+                    if (!this.animations[initialEmotion]) {
+                        throw new Error(`Unknown initial emotion: ${initialEmotion}`);
+                    }
+                }
+                setEmotion(key) {
+                    if (!this.animations[key] || key === this.currentEmotion || this.morphing) {
+                        return;
+                    }
+                    const now = performance.now();
+                    const { shapes } = this.getCurrentFrame(now);
+                    this.startShapes = shapes.map((shape) => ({
+                        pos: { x: shape.pos.x, y: shape.pos.y },
+                        vertices: shape.vertices.map((p) => ({ x: p.x, y: p.y })),
+                        color: shape.color,
+                    }));
+                    this.startColour = this.emotionColours[this.currentEmotion];
+                    this.targetColour = this.emotionColours[key];
+                    this.targetEmotion = key;
+                    this.morphStartTime = now;
+                    this.morphing = true;
+                    this.startPairs = null;
+                }
+                update(timestamp) {
+                    this.shapesToDraw = [];
+                    if (this.morphing && this.targetEmotion) {
+                        const t = Math.min(1, (timestamp - this.morphStartTime) / this.MORPH_DURATION);
+                        if (!this.startShapes) {
+                            this.morphing = false;
+                            return;
+                        }
+                        const targetShapes = this.animations[this.targetEmotion].frames[0].shapes;
+                        if (!this.startPairs) {
+                            this.startPairs = this.computePairs(this.startShapes, targetShapes);
+                        }
+                        for (const pair of this.startPairs) {
+                            const sShape = this.startShapes[pair.startIndex];
+                            const tShape = targetShapes[pair.targetIndex];
+                            const ipoints = [];
+                            for (let vi = 0; vi < this.unifyCount; vi++) {
+                                const sx = sShape.vertices[vi].x + sShape.pos.x;
+                                const sy = sShape.vertices[vi].y + sShape.pos.y;
+                                const tx = tShape.vertices[vi].x + tShape.pos.x;
+                                const ty = tShape.vertices[vi].y + tShape.pos.y;
+                                ipoints.push({ x: lerp(sx, tx, t), y: lerp(sy, ty, t) });
+                            }
+                            const interpColour = this.startColour && this.targetColour ? lerpColor(this.startColour, this.targetColour, t) : { r: 255, g: 255, b: 255 };
+                            const colourStr = `rgb(${interpColour.r}, ${interpColour.g}, ${interpColour.b})`;
+                            this.shapesToDraw.push({ points: ipoints, color: colourStr });
+                        }
+                        if (t >= 1) {
+                            this.currentEmotion = this.targetEmotion;
+                            this.targetEmotion = null;
+                            this.morphing = false;
+                            this.cycleStartTime = timestamp;
+                        }
+                    } else {
+                        const { shapes } = this.getCurrentFrame(timestamp);
+                        for (const shape of shapes) {
+                            const pts = [];
+                            for (let vi = 0; vi < this.unifyCount; vi++) {
+                                const v = shape.vertices[vi];
+                                pts.push({ x: v.x + shape.pos.x, y: v.y + shape.pos.y });
+                            }
+                            this.shapesToDraw.push({ points: pts, color: shape.color });
+                        }
+                    }
+                }
+                draw() {
+                    const ctx = this.ctx;
+                    const canvas = ctx.canvas;
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    for (const shape of this.shapesToDraw) {
+                        const pts = shape.points;
+                        if (!pts.length) continue;
+                        ctx.beginPath();
+                        ctx.moveTo(pts[0].x, pts[0].y);
+                        for (let i = 1; i < pts.length; i++) {
+                            ctx.lineTo(pts[i].x, pts[i].y);
+                        }
+                        ctx.closePath();
+                        ctx.shadowBlur = 20;
+                        ctx.shadowColor = shape.color;
+                        ctx.fillStyle = shape.color;
+                        ctx.fill();
+                    }
+                }
+                computePairs(startShapes, targetShapes) {
+                    const pairs = [];
+                    const usedTargets = new Set();
+                    const startCentroids = startShapes.map((s) => centroid(s));
+                    const targetCentroids = targetShapes.map((s) => centroid(s));
+                    for (let i = 0; i < startShapes.length; i++) {
+                        let minDist = Infinity;
+                        let chosen = 0;
+                        for (let j = 0; j < targetShapes.length; j++) {
+                            if (usedTargets.has(j)) continue;
+                            const dx = startCentroids[i].x - targetCentroids[j].x;
+                            const dy = startCentroids[i].y - targetCentroids[j].y;
+                            const distSq = dx * dx + dy * dy;
+                            if (distSq < minDist) {
+                                minDist = distSq;
+                                chosen = j;
+                            }
+                        }
+                        usedTargets.add(chosen);
+                        pairs.push({ startIndex: i, targetIndex: chosen });
+                    }
+                    return pairs;
+                }
+                getCurrentFrame(timestamp) {
+                    const anim = this.animations[this.currentEmotion];
+                    if (!anim || anim.frames.length === 0) {
+                        return { shapes: [], duration: 0 };
+                    }
+                    const elapsed = timestamp - this.cycleStartTime;
+                    let totalDuration = 0;
+                    for (const frame of anim.frames) {
+                        totalDuration += frame.duration;
+                    }
+                    const mod = elapsed % totalDuration;
+                    let accum = 0;
+                    for (const frame of anim.frames) {
+                        if (mod < accum + frame.duration) {
+                            return { shapes: frame.shapes, duration: frame.duration };
+                        }
+                        accum += frame.duration;
+                    }
+                    const lastFrame = anim.frames[anim.frames.length - 1];
+                    return { shapes: lastFrame.shapes, duration: lastFrame.duration };
+                }
+            }
+
+            /**
+             * Generate a regular polygon approximating a circle. Vertices are
+             * centred around the origin.
+             */
+            function circle(r, sides = 32) {
+                const pts = [];
+                for (let i = 0; i < sides; i++) {
+                    const a = (i / sides) * 2 * Math.PI;
+                    pts.push({ x: Math.cos(a) * r, y: Math.sin(a) * r });
+                }
+                return pts;
+            }
+
+            /**
+             * Generate a star shape. The number of points controls how many
+             * spikes the star has. The innerRatio determines how deep the
+             * spikes penetrate (0–1). Vertices are centred around the origin.
+             */
+            function star(r, points = 5, innerRatio = 0.5) {
+                const pts = [];
+                const totalVertices = points * 2;
+                for (let i = 0; i < totalVertices; i++) {
+                    const angle = (i * Math.PI) / points;
+                    const rad = i % 2 === 0 ? r : r * innerRatio;
+                    pts.push({ x: Math.cos(angle) * rad, y: Math.sin(angle) * rad });
+                }
+                return pts;
+            }
+
+            /**
+             * Generate a triangular shape with equal sides, centred at the origin.
+             */
+            function triangle(r) {
+                return circle(r, 3);
+            }
+
+            /**
+             * Approximate a heart shape using a parametric equation. Returns
+             * vertices centred at the origin. The size parameter controls
+             * the approximate width/height of the heart.
+             */
+            function heart(size = 40, points = 80) {
+                const verts = [];
+                for (let i = 0; i < points; i++) {
+                    const t = (i / points) * 2 * Math.PI;
+                    const x = 16 * Math.pow(Math.sin(t), 3);
+                    const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+                    verts.push({ x: x * (size / 32), y: -y * (size / 32) });
+                }
+                return verts;
+            }
+
+            // Define our animations. Each emotion has a single frame with two shapes.
+            const animations = {
+                neutral: {
+                    frames: [
+                        {
+                            duration: 1000,
+                            shapes: [
+                                { pos: { x: 200, y: 150 }, vertices: circle(30, 32), color: '#00ff00' },
+                                { pos: { x: 400, y: 150 }, vertices: circle(30, 32), color: '#00ff00' },
+                            ],
+                        },
+                    ],
+                },
+                happy: {
+                    frames: [
+                        {
+                            duration: 1000,
+                            shapes: [
+                                { pos: { x: 200, y: 150 }, vertices: star(35, 5, 0.45), color: '#ffff00' },
+                                { pos: { x: 400, y: 150 }, vertices: star(35, 5, 0.45), color: '#ffff00' },
+                            ],
+                        },
+                    ],
+                },
+                angry: {
+                    frames: [
+                        {
+                            duration: 1000,
+                            shapes: [
+                                { pos: { x: 200, y: 150 }, vertices: triangle(40), color: '#ff3333' },
+                                { pos: { x: 400, y: 150 }, vertices: triangle(40), color: '#ff3333' },
+                            ],
+                        },
+                    ],
+                },
+                surprised: {
+                    frames: [
+                        {
+                            duration: 1000,
+                            shapes: [
+                                { pos: { x: 200, y: 150 }, vertices: circle(45, 32), color: '#3399ff' },
+                                { pos: { x: 400, y: 150 }, vertices: circle(45, 32), color: '#3399ff' },
+                            ],
+                        },
+                    ],
+                },
+                love: {
+                    frames: [
+                        {
+                            duration: 1000,
+                            shapes: [
+                                { pos: { x: 200, y: 150 }, vertices: heart(50, 80), color: '#ff66cc' },
+                                { pos: { x: 400, y: 150 }, vertices: heart(50, 80), color: '#ff66cc' },
+                            ],
+                        },
+                    ],
+                },
+            };
+
+            const canvas = document.getElementById('emotionCanvas');
+            const ctx = canvas.getContext('2d');
+            const system = new EmotionSystem(ctx, animations, 'neutral');
+            window.setEmotion = (name) => system.setEmotion(name);
+            function loop(ts) {
+                system.update(ts);
+                system.draw();
+                requestAnimationFrame(loop);
+            }
+            requestAnimationFrame(loop);
+        </script>
+    </body>
+</html>

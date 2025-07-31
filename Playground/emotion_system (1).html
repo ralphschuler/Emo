@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<!--
+  AI Companion Emotion Display
+
+  This HTML document implements a simple, framework‑free emotion display
+  using an HTML5 canvas. Each emotion is described as a shape with
+  configurable parameters (number of sides, radius, rotation and colour).
+  When switching between emotions, the system smoothly morphs from the
+  current shape to the target shape by linearly interpolating every
+  vertex and colour over a fixed duration.  A small amount of shadow
+  blur is applied to give the shapes a soft, organic look reminiscent of
+  metaball blending, without resorting to expensive rendering techniques.
+
+  Use the buttons below the canvas to trigger different emotions. The
+  morphing is handled automatically using requestAnimationFrame.  No
+  external libraries or frameworks are required.
+-->
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Companion – Emotionen</title>
+    <style>
+      /* Basic reset and layout */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background-color: #111;
+        color: #fff;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      h1 {
+        margin-top: 24px;
+        margin-bottom: 8px;
+        font-size: 1.8rem;
+        font-weight: 600;
+        text-align: center;
+      }
+
+      #canvas {
+        border: 1px solid #444;
+        border-radius: 12px;
+        background-color: transparent;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+      }
+
+      .button-container {
+        margin-top: 20px;
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 20px;
+        background-color: #333;
+        color: #fff;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: background-color 0.25s ease;
+      }
+
+      button:hover {
+        background-color: #555;
+      }
+
+      button:active {
+        background-color: #777;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>AI‑Begleiter Emotionen</h1>
+    <canvas id="canvas" width="500" height="400"></canvas>
+    <div class="button-container">
+      <button data-emotion="neutral">Neutral</button>
+      <button data-emotion="happy">Happy</button>
+      <button data-emotion="angry">Angry</button>
+      <button data-emotion="surprised">Surprised</button>
+      <button data-emotion="love">Love</button>
+    </div>
+
+    <script>
+      (function () {
+        /**
+         * Helper: linear interpolation between two numbers.
+         */
+        function lerp(a, b, t) {
+          return a + (b - a) * t;
+        }
+
+        /**
+         * Convert a hex colour string (3 or 6 digit) to an object {r,g,b}.
+         */
+        function hexToRgb(hex) {
+          let cleaned = hex.replace('#', '').trim();
+          if (cleaned.length === 3) {
+            cleaned = cleaned[0] + cleaned[0] + cleaned[1] + cleaned[1] + cleaned[2] + cleaned[2];
+          }
+          const num = parseInt(cleaned, 16);
+          return {
+            r: (num >> 16) & 255,
+            g: (num >> 8) & 255,
+            b: num & 255,
+          };
+        }
+
+        /**
+         * Generate the vertex points for a given shape definition. Points are
+         * centred around the origin. When isStar is true, the number of
+         * vertices doubles to include inner vertices.
+         */
+        function generatePoints(def) {
+          const pts = [];
+          const sides = Math.max(3, Math.floor(def.sides));
+          const rot = def.rotation || 0;
+          const radius = def.radius || 50;
+          if (def.isStar) {
+            const innerRatio = def.innerRatio !== undefined ? def.innerRatio : 0.5;
+            const totalVertices = sides * 2;
+            for (let i = 0; i < totalVertices; i++) {
+              const angle = rot + (i * Math.PI) / sides;
+              const rad = i % 2 === 0 ? radius : radius * innerRatio;
+              pts.push({ x: rad * Math.cos(angle), y: rad * Math.sin(angle) });
+            }
+          } else {
+            for (let i = 0; i < sides; i++) {
+              const angle = rot + (i * 2 * Math.PI) / sides;
+              pts.push({ x: radius * Math.cos(angle), y: radius * Math.sin(angle) });
+            }
+          }
+          return pts;
+        }
+
+        /**
+         * Resample a closed polyline to a fixed number of equally spaced points.
+         * This is used to ensure all frames for an emotion have the same
+         * number of vertices for smooth transitions.
+         */
+        function resamplePoints(points, count) {
+          if (points.length === count) return points.slice();
+          const closed = points.concat([points[0]]);
+          const segLengths = [];
+          let total = 0;
+          for (let i = 0; i < closed.length - 1; i++) {
+            const dx = closed[i + 1].x - closed[i].x;
+            const dy = closed[i + 1].y - closed[i].y;
+            const len = Math.hypot(dx, dy);
+            segLengths.push(len);
+            total += len;
+          }
+          const out = [];
+          for (let i = 0; i < count; i++) {
+            const dist = (i / count) * total;
+            let accum = 0;
+            let seg = 0;
+            while (seg < segLengths.length && accum + segLengths[seg] < dist) {
+              accum += segLengths[seg];
+              seg++;
+            }
+            const segDist = dist - accum;
+            const segLen = segLengths[seg] || 1;
+            const t = segLen > 0 ? segDist / segLen : 0;
+            const p0 = closed[seg];
+            const p1 = closed[seg + 1];
+            out.push({ x: lerp(p0.x, p1.x, t), y: lerp(p0.y, p1.y, t) });
+          }
+          return out;
+        }
+
+        // Canvas and sizing: match the CSS size. We avoid DPI scaling here
+        // for simplicity. The canvas width/height will be updated to
+        // reflect its CSS dimensions whenever the window resizes. This
+        // ensures the coordinate system maps 1:1 to CSS pixels and
+        // simplifies translations.
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        // Global error handler to surface runtime errors directly on the page.
+        // Comment out in production to avoid displaying internal messages.
+        // window.onerror = function (message, source, lineno, colno, error) {
+        //   const errMsg = document.createElement('div');
+        //   errMsg.style.color = '#f55';
+        //   errMsg.style.marginTop = '10px';
+        //   errMsg.textContent = 'Error: ' + message + ' (' + lineno + ':' + colno + ')';
+        //   document.body.appendChild(errMsg);
+        // };
+        // Global positions for each pupil. These are updated whenever the
+        // canvas is resized. Each entry is an object {x, y} representing
+        // the offset from the canvas centre.
+        let pupilPositions = [];
+        function resizeCanvas() {
+          const rect = canvas.getBoundingClientRect();
+          canvas.width = rect.width;
+          canvas.height = rect.height;
+
+          // Calculate symmetric positions for the two pupils. They are
+          // positioned horizontally around the centre of the canvas. The
+          // horizontal offset is proportional to the canvas width so that
+          // pupils remain appropriately spaced on different window sizes.
+          const xOffset = canvas.width * 0.2;
+          pupilPositions = [
+            { x: -xOffset, y: 0 },
+            { x: xOffset, y: 0 },
+          ];
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        /**
+         * Configuration for each emotion. Each entry defines a base shape,
+         * variations for radius or rotation and how many frames should be
+         * generated for its animation cycle. Colour is stored separately.
+         */
+        const emotionConfig = {
+          neutral: {
+            base: { sides: 32, radius: 80, rotation: 0, color: '#00aa55' },
+            frames: 60,
+            variation: { radius: 0.05, rotation: 0 },
+          },
+          happy: {
+            base: { sides: 5, radius: 80, rotation: 0, color: '#ffdd00', isStar: true, innerRatio: 0.45 },
+            frames: 60,
+            variation: { radius: 0.05, rotation: 0.3 },
+          },
+          angry: {
+            base: { sides: 3, radius: 80, rotation: Math.PI / 2, color: '#e53935' },
+            frames: 60,
+            variation: { radius: 0.05, rotation: 0.2 },
+          },
+          surprised: {
+            base: { sides: 32, radius: 120, rotation: 0, color: '#2979ff' },
+            frames: 60,
+            variation: { radius: 0.1, rotation: 0 },
+          },
+          love: {
+            base: { sides: 6, radius: 90, rotation: 0, color: '#ec407a' },
+            frames: 60,
+            variation: { radius: 0.06, rotation: 0.2 },
+          },
+        };
+
+        // Number of vertices per frame (higher values yield smoother morphing)
+        const UNIFY_COUNT = 64;
+
+        /**
+         * Build animated frames for each emotion. Each frame now contains an array
+         * of shapes (pupils). Each shape is defined by an array of points
+         * relative to its own centre. We do not include positional offsets at
+         * this stage—offsets are applied during rendering based on the
+         * canvas size. Colour is extracted once per emotion.
+         */
+        const emotions = {};
+        for (const key in emotionConfig) {
+          const cfg = emotionConfig[key];
+          const { base, variation, frames: fCount } = cfg;
+          const colour = hexToRgb(base.color);
+          const frames = [];
+          // Each emotion will generate two pupil shapes per frame. We compute the
+          // same shape twice, then position them symmetrically later. The
+          // variation values drive slight pulsations and rotations.
+          for (let i = 0; i < fCount; i++) {
+            const phase = (i / fCount) * Math.PI * 2;
+            const radVar = variation.radius || 0;
+            const rotVar = variation.rotation || 0;
+            const frameRadius = base.radius * (1 + radVar * Math.sin(phase));
+            const frameRotation = base.rotation + rotVar * Math.sin(phase);
+            const frameShapeDef = {
+              sides: base.sides,
+              radius: frameRadius,
+              rotation: frameRotation,
+              isStar: base.isStar,
+              innerRatio: base.innerRatio,
+            };
+            let pts = generatePoints(frameShapeDef);
+            pts = resamplePoints(pts, UNIFY_COUNT);
+            // Duplicate the shape for the two pupils; store as separate shape
+            frames.push([pts.slice(), pts.slice()]);
+          }
+          emotions[key] = { frames, colour };
+        }
+
+        // Animation/morphing state
+        let currentEmotion = 'neutral';
+        let targetEmotion = null;
+        let morphing = false;
+        let morphStartTime = 0;
+        const MORPH_DURATION = 400; // milliseconds for morph transitions
+        // When a morph begins we capture the current shapes and their offsets,
+        // along with the starting colour. These are arrays of equal length
+        // (one per pupil) and used to interpolate to the target shapes.
+        let startShapes = null;      // array of arrays of points (per shape)
+        let startOffsets = null;     // array of offsets (per shape)
+        let startColour = null;      // starting colour {r,g,b}
+        let targetOffsets = null;    // array of offsets for the target shapes at morph start
+
+        // Start time for frame cycling within the current emotion
+        let emotionStartTime = performance.now();
+        const FRAME_DURATION = 1000 / 60; // roughly 60 fps for frame cycling
+
+        /**
+         * Interpolate between two colours (objects with r,g,b) given a factor t
+         */
+        function lerpColor(c1, c2, t) {
+          return {
+            r: Math.round(lerp(c1.r, c2.r, t)),
+            g: Math.round(lerp(c1.g, c2.g, t)),
+            b: Math.round(lerp(c1.b, c2.b, t)),
+          };
+        }
+
+        /**
+         * Render loop. Handles both morphing transitions and ongoing frame
+         * animation for the current emotion. Supports multiple shapes per
+         * frame (two pupils) and morphs each to its nearest neighbour on
+         * emotion changes.
+         */
+        function draw(timestamp) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          let shapesToDraw = [];
+          let colour;
+
+          if (morphing) {
+            // compute interpolation factor
+            const t = Math.min(1, (timestamp - morphStartTime) / MORPH_DURATION);
+            const targetFrames = emotions[targetEmotion].frames;
+            // always morph towards the first frame of the target emotion
+            const targetShapesPoints = targetFrames[0];
+            const targetColour = emotions[targetEmotion].colour;
+            const pairs = [];
+            // Compute centroids for start and target shapes with offsets
+            const startCentroids = startShapes.map((pts, idx) => {
+              const off = startOffsets[idx];
+              let cx = 0;
+              let cy = 0;
+              for (const p of pts) {
+                cx += p.x + off.x;
+                cy += p.y + off.y;
+              }
+              const n = pts.length;
+              return { x: cx / n, y: cy / n };
+            });
+            const targetCentroids = targetShapesPoints.map((pts, idx) => {
+              const off = targetOffsets[idx];
+              let cx = 0;
+              let cy = 0;
+              for (const p of pts) {
+                cx += p.x + off.x;
+                cy += p.y + off.y;
+              }
+              const n = pts.length;
+              return { x: cx / n, y: cy / n };
+            });
+            // Greedy matching: for each start shape find nearest target
+            const usedTargets = new Set();
+            for (let i = 0; i < startShapes.length; i++) {
+              let minDist = Infinity;
+              let chosen = 0;
+              for (let j = 0; j < targetShapesPoints.length; j++) {
+                if (usedTargets.has(j)) continue;
+                const dx = startCentroids[i].x - targetCentroids[j].x;
+                const dy = startCentroids[i].y - targetCentroids[j].y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq < minDist) {
+                  minDist = distSq;
+                  chosen = j;
+                }
+              }
+              usedTargets.add(chosen);
+              pairs.push({ startIndex: i, targetIndex: chosen });
+            }
+            // Build interpolated shapes
+            for (const pair of pairs) {
+              const spoints = startShapes[pair.startIndex];
+              const sOff = startOffsets[pair.startIndex];
+              const tpoints = targetShapesPoints[pair.targetIndex];
+              const tOff = targetOffsets[pair.targetIndex];
+              const ipoints = [];
+              for (let vi = 0; vi < spoints.length; vi++) {
+                const sx = spoints[vi].x + sOff.x;
+                const sy = spoints[vi].y + sOff.y;
+                const tx = tpoints[vi].x + tOff.x;
+                const ty = tpoints[vi].y + tOff.y;
+                ipoints.push({ x: lerp(sx, tx, t), y: lerp(sy, ty, t) });
+              }
+              shapesToDraw.push({ points: ipoints, offset: { x: 0, y: 0 } });
+            }
+            const interpColour = lerpColor(startColour, targetColour, t);
+            colour = `rgb(${interpColour.r}, ${interpColour.g}, ${interpColour.b})`;
+            if (t >= 1) {
+              // finish morph: commit to target emotion and reset cycle
+              currentEmotion = targetEmotion;
+              targetEmotion = null;
+              morphing = false;
+              emotionStartTime = timestamp;
+            }
+          } else {
+            // normal frame cycling for current emotion
+            const emo = emotions[currentEmotion];
+            const totalFrames = emo.frames.length;
+            const elapsed = timestamp - emotionStartTime;
+            let rawIndex = Math.floor(elapsed / FRAME_DURATION);
+            if (!Number.isFinite(rawIndex) || rawIndex < 0) {
+              rawIndex = 0;
+            }
+            const frameIndex = rawIndex % totalFrames;
+            const frameShapes = emo.frames[frameIndex] || [];
+            // Build shapes with offsets
+            for (let i = 0; i < frameShapes.length; i++) {
+              const pts = frameShapes[i];
+              const off = pupilPositions[i] || { x: 0, y: 0 };
+              shapesToDraw.push({ points: pts, offset: off });
+            }
+            const c = emo.colour;
+            colour = `rgb(${c.r}, ${c.g}, ${c.b})`;
+          }
+
+          // Draw each shape centred on the canvas
+          ctx.save();
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          for (const shape of shapesToDraw) {
+            const pts = shape.points;
+            const off = shape.offset;
+            if (!pts || pts.length === 0) continue;
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x + off.x, pts[0].y + off.y);
+            for (let i = 1; i < pts.length; i++) {
+              ctx.lineTo(pts[i].x + off.x, pts[i].y + off.y);
+            }
+            ctx.closePath();
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = colour;
+            ctx.fillStyle = colour;
+            ctx.fill();
+          }
+          ctx.restore();
+
+          requestAnimationFrame(draw);
+        }
+        requestAnimationFrame(draw);
+
+        // Update current emotion when a button is clicked. Initiates a
+        // morph transition from the current shapes to the new emotion's
+        // first frame. If the requested emotion is already active or a
+        // morph is underway, no transition occurs.
+        function setEmotion(key) {
+          if (!emotions[key] || key === currentEmotion || morphing) return;
+          targetEmotion = key;
+          // Capture the current shapes and their offsets at the time of switching.
+          const emo = emotions[currentEmotion];
+          const elapsed = performance.now() - emotionStartTime;
+          const totalFrames = emo.frames.length;
+          let rawIndex = Math.floor(elapsed / FRAME_DURATION);
+          if (!Number.isFinite(rawIndex) || rawIndex < 0) {
+            rawIndex = 0;
+          }
+          const frameIndex = rawIndex % totalFrames;
+          startShapes = emo.frames[frameIndex];
+          // Clone current pupilPositions to freeze offsets for the morph duration
+          startOffsets = pupilPositions.map(pos => ({ x: pos.x, y: pos.y }));
+          startColour = emo.colour;
+          // Prepare target offsets (positions) for the incoming emotion. At this
+          // point the pupils remain in the same positions as the start offsets.
+          targetOffsets = pupilPositions.map(pos => ({ x: pos.x, y: pos.y }));
+          morphStartTime = performance.now();
+          morphing = true;
+        }
+
+        document.querySelectorAll('button[data-emotion]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const key = btn.getAttribute('data-emotion');
+            setEmotion(key);
+          });
+        });
+
+      })();
+	    </script>
+	  </body>
+	</html>
