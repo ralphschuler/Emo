@@ -32,8 +32,8 @@ function detectFramebufferInfo(dev: string = "/dev/fb0"): FramebufferInfo {
   const base = "/sys/class/graphics/fb0";
   const bpp = readSysfsNumber(`${base}/bits_per_pixel`) ?? 16;
   const vsz = readSysfsCsv(`${base}/virtual_size`);
-  let width = vsz?.[0] ?? parseInt(process.env.FB_WIDTH ?? "", 10) || 240;
-  let height = vsz?.[1] ?? parseInt(process.env.FB_HEIGHT ?? "", 10) || 320;
+  const width = vsz?.[0] ? parseInt(process.env.FB_WIDTH ?? "", 10) : 240;
+  const height = vsz?.[1] ? parseInt(process.env.FB_HEIGHT ?? "", 10) : 320;
 
   const bytesPerPixel = Math.ceil(bpp / 8);
   const stride = width * bytesPerPixel;
@@ -65,7 +65,6 @@ export class Framebuffer {
   private fbFd = -1;
   private buffer: ArrayBuffer | null = null;
   private viewU8: Uint8Array | null = null;
-  private length = 0;
   private bytesPerPixel: number;
 
   private constructor(info: FramebufferInfo, fd: number, ab: ArrayBuffer) {
