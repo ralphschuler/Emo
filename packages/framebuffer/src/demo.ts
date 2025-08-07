@@ -1,4 +1,4 @@
-import { Framebuffer, colors } from "./Framebuffer";
+import { Framebuffer, colors } from "./framebuffer";
 
 /** Schnelles HSV→RGB für smooth Color Cycling */
 function hsvToRgb(h: number, s: number, v: number) {
