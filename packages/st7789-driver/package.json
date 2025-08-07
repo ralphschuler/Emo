@@ -1,6 +1,6 @@
 {
-  "name": "framebuffer",
-  "module": "src/framebuffer.ts",
+  "name": "st7789-driver",
+  "module": "src/st7789.ts",
   "type": "module",
   "devDependencies": {
     "@types/bun": "latest",
