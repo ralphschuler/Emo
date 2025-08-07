@@ -1,7 +1,7 @@
 import { ST7789 } from "./st7789";
 
 const lcd = new ST7789({
-  spiDevice: "/dev/spidev0.0",
+  //spiDevice: "/dev/spidev0.0",
   width: 240,
   height: 320,
   rotation: 0,
