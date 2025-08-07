@@ -1,16 +1,11 @@
 #include "native.h"
-
-#include <stdio.h>
-#include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <errno.h>
 #include <sys/ioctl.h>
 #include <linux/spi/spidev.h>
 
 int spi_open(const char* dev) {
-  int fd = open(dev, O_RDWR);
-  return fd; // -1 bei Fehler
+  return open(dev, O_RDWR);
 }
 
 int spi_config(int fd, uint8_t mode, uint8_t bits, uint32_t speed_hz) {
@@ -20,9 +15,9 @@ int spi_config(int fd, uint8_t mode, uint8_t bits, uint32_t speed_hz) {
   return 0;
 }
 
-ssize_t spi_write_buf(int fd, const uint8_t* buf, size_t len) {
+int spi_write_buf(int fd, const uint8_t* buf, size_t len) {
   ssize_t w = write(fd, buf, len);
-  return w; // < 0 = Fehler
+  return (w < 0) ? -1 : (int)w;
 }
 
 int spi_close(int fd) {

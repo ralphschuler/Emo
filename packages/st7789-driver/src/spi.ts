@@ -16,9 +16,6 @@ export class SpiDev {
       throw new Error(`SPI write failed (${n}/${buf.byteLength})`);
     }
   }
-  close() {
-    if (this.fd >= 0) c.spiClose(this.fd);
-    this.fd = -1;
-  }
+  close() { if (this.fd >= 0) c.spiClose(this.fd); this.fd = -1; }
   msleep(ms: number) { c.msleep(ms); }
 }

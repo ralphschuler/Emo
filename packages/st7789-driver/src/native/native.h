@@ -5,10 +5,11 @@
 #include <stddef.h>
 
 // ---- SPI ----
-int spi_open(const char* dev);
-int spi_config(int fd, uint8_t mode, uint8_t bits, uint32_t speed_hz);
-ssize_t spi_write_buf(int fd, const uint8_t* buf, size_t len);
-int spi_close(int fd);
+int  spi_open(const char* dev);
+int  spi_config(int fd, uint8_t mode, uint8_t bits, uint32_t speed_hz);
+/** returns: >=0 bytes written, <0 on error */
+int  spi_write_buf(int fd, const uint8_t* buf, size_t len);
+int  spi_close(int fd);
 void msleep(unsigned ms);
 
 // ---- GPIO (Sysfs, simpel) ----

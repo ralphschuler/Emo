@@ -1,9 +1,8 @@
 #include "native.h"
-
-#include <stdio.h>
-#include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <string.h>
+#include <stdio.h>
 
 static int write_str(const char* path, const char* s) {
   int fd = open(path, O_WRONLY);
@@ -16,7 +15,7 @@ static int write_str(const char* path, const char* s) {
 int gpio_export(unsigned pin) {
   char buf[16];
   snprintf(buf, sizeof(buf), "%u", pin);
-  // Ignoriere Fehler, falls bereits exportiert
+  // ignore error if already exported
   write_str("/sys/class/gpio/export", buf);
   return 0;
 }
