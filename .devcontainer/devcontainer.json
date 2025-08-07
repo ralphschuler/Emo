@@ -1,0 +1,14 @@
+{
+  "name": "Bun",
+  "dockerFile": "Dockerfile",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "oven.bun-vscode"
+      ]
+    }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/dotnet:2": {}
+  }
+}
