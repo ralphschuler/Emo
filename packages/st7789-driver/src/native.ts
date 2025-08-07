@@ -1,4 +1,4 @@
-import { cc } from "bun:cc";
+import { cc } from "bun:ffi";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
