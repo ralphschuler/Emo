@@ -1,4 +1,4 @@
-import { Framebuffer, colors } from "./Framebuffer";
+import { Framebuffer, colors } from "./framebuffer";
 
 const { width, height, depth } = Framebuffer.detect("/dev/fb0");
 const fb = new Framebuffer("/dev/fb0", width, height, depth, { /* format/stride optional */ });
