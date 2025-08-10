@@ -100,19 +100,20 @@ export class ST7735 {
     this.spi.write(b);
   }
   private writePixels565(pix: Uint16Array) {
-    // Big-endian (MSB first) in Bytes umwandeln
     const out = new Uint8Array(pix.length * 2);
-    let j = 0;
-    for (let i = 0; i < pix.length; i++) {
+    for (let i = 0, j = 0; i < pix.length; i++) {
       const v = pix[i];
       out[j++] = (v >> 8) & 0xff;
       out[j++] = v & 0xff;
     }
 
-    // spidev bufsiz – konservativ 4096 Bytes (override via ENV möglich)
     const MAX_SPI_BYTES = Number(process.env.SPI_BUFSIZ ?? 4096);
-    for (let offset = 0; offset < out.length; offset += MAX_SPI_BYTES) {
-      const chunk = out.subarray(offset, Math.min(offset + MAX_SPI_BYTES, out.length));
+
+    for (let off = 0; off < out.length; off += MAX_SPI_BYTES) {
+      const chunk = out.subarray(off, Math.min(off + MAX_SPI_BYTES, out.length));
+      // <- WICHTIG: RAMWR vor jedem Chunk, damit der Controller wieder "im Datenmodus" ist
+      this.ramwr();
+      this.dc.high();
       this.spi.write(chunk);
     }
   }
@@ -211,6 +212,11 @@ export class ST7735 {
     this.pushRect(0, 0, this.width, this.height, color565);
   }
 
+  private ramwr() {
+    // 0x2C = RAMWR
+    this.writeCmdByte(0x2c);
+  }
+
   pushRect(x: number, y: number, w: number, h: number, src?: number | Uint16Array) {
     if (w <= 0 || h <= 0) return;
     if (x < 0 || y < 0 || x + w > this.width || y + h > this.height)
@@ -219,28 +225,22 @@ export class ST7735 {
 
     if (src === undefined || typeof src === "number") {
       const color = (typeof src === "number") ? (src & 0xffff) : 0x0000;
-      const totalPixels = w * h;
-      const MAX_SPI_BYTES = Number(process.env.SPI_BUFSIZ ?? 4096);
-      const CHUNK_PIXELS = Math.floor(MAX_SPI_BYTES / 2); // 2 Bytes pro Pixel
-
-      const fillBuf = new Uint16Array(CHUNK_PIXELS);
-      fillBuf.fill(color);
-
-      let remaining = totalPixels;
+      const total = w * h;
+      const buf = new Uint16Array(Math.min(total, 2048)); // nur temporär für Fills
+      buf.fill(color);
+      let remaining = total;
       while (remaining > 0) {
-        const n = Math.min(remaining, CHUNK_PIXELS);
-        this.writePixels565(n === CHUNK_PIXELS ? fillBuf : fillBuf.subarray(0, n));
+        const n = Math.min(remaining, buf.length);
+        this.writePixels565(n === buf.length ? buf : buf.subarray(0, n));
         remaining -= n;
       }
     } else {
       if (src.length !== w*h) throw new Error(`src length mismatch`);
-      const MAX_SPI_BYTES = Number(process.env.SPI_BUFSIZ ?? 4096);
-      const CHUNK_PIXELS = Math.floor(MAX_SPI_BYTES / 2);
-
-      for (let off = 0; off < src.length; off += CHUNK_PIXELS) {
-        const slice = src.subarray(off, Math.min(off + CHUNK_PIXELS, src.length));
-        this.writePixels565(slice);
+      const MAX_PIX = Math.floor((Number(process.env.SPI_BUFSIZ ?? 4096)) / 2);
+      for (let off = 0; off < src.length; off += MAX_PIX) {
+        this.writePixels565(src.subarray(off, Math.min(off + MAX_PIX, src.length)));
       }
+
     }
   }
 
