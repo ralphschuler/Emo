@@ -1,5 +1,5 @@
 // src/st7735.ts
-import { spiOpen, SPIHandle } from "./native/spi.js";
+import { spiOpen, type SPIHandle } from "./native/spi.js";
 import { GpioLine } from "./native/gpio.js";
 
 export type RGBA = { r: number; g: number; b: number; a?: number };
@@ -39,9 +39,9 @@ const CMD = {
   GMCTRN1: 0xe1,
 } as const;
 
-export type ST7735Rotation = 0|90|180|270;
+export type ST7789Rotation = 0|90|180|270;
 
-export interface ST7735Options {
+export interface ST7789Options {
   width: number;
   height: number;
   /** z.B. "/dev/spidev0.0" */
@@ -63,10 +63,10 @@ export interface ST7735Options {
   colOffset?: number;
   rowOffset?: number;
   invert?: boolean;
-  rotation?: ST7735Rotation;
+  rotation?: ST7789Rotation;
 }
 
-export class ST7735 {
+export class ST7789 {
   readonly width: number;
   readonly height: number;
   readonly colOffset: number;
@@ -77,9 +77,9 @@ export class ST7735 {
   private rst!: GpioLine;
   private bl?: GpioLine;
 
-  private rotation: ST7735Rotation;
+  private rotation: ST7789Rotation;
 
-  constructor(private opts: ST7735Options) {
+  constructor(private opts: ST7789Options) {
     this.width = opts.width;
     this.height = opts.height;
     this.colOffset = opts.colOffset ?? 0;
@@ -106,13 +106,9 @@ export class ST7735 {
       out[j++] = (v >> 8) & 0xff;
       out[j++] = v & 0xff;
     }
-
     const MAX_SPI_BYTES = Number(process.env.SPI_BUFSIZ ?? 4096);
-
     for (let off = 0; off < out.length; off += MAX_SPI_BYTES) {
       const chunk = out.subarray(off, Math.min(off + MAX_SPI_BYTES, out.length));
-      // <- WICHTIG: RAMWR vor jedem Chunk, damit der Controller wieder "im Datenmodus" ist
-      this.ramwr();
       this.dc.high();
       this.spi.write(chunk);
     }
@@ -219,7 +215,7 @@ export class ST7735 {
     if (on) this.bl.high(); else this.bl.low();
   }
 
-  setRotation(rot: ST7735Rotation) {
+  setRotation(rot: ST7789Rotation) {
     this.rotation = rot;
     let madctl = 0x00;
     madctl |= 0x08;
@@ -262,26 +258,48 @@ export class ST7735 {
     if (w <= 0 || h <= 0) return;
     if (x < 0 || y < 0 || x + w > this.width || y + h > this.height)
       throw new Error(`pushRect OOB: ${x},${y},${w},${h}`);
-    this.setAddressWindow(x, y, w, h);
+
+    const MAX_SPI_BYTES = Number(process.env.SPI_BUFSIZ ?? 4096);
+    const BYTES_PER_ROW = w * 2;
+    const ROWS_PER_BLOCK = Math.max(1, Math.floor(MAX_SPI_BYTES / BYTES_PER_ROW));
 
     if (src === undefined || typeof src === "number") {
+      // Konstante Farbe
       const color = (typeof src === "number") ? (src & 0xffff) : 0x0000;
-      const total = w * h;
-      const buf = new Uint16Array(Math.min(total, 2048)); // nur temporär für Fills
-      buf.fill(color);
-      let remaining = total;
-      while (remaining > 0) {
-        const n = Math.min(remaining, buf.length);
-        this.writePixels565(n === buf.length ? buf : buf.subarray(0, n));
-        remaining -= n;
+      const blockPix = new Uint16Array(ROWS_PER_BLOCK * w);
+      blockPix.fill(color);
+
+      let rowsLeft = h;
+      let yCur = y;
+      while (rowsLeft > 0) {
+        const rows = Math.min(rowsLeft, ROWS_PER_BLOCK);
+        // Fenster exakt auf den Block setzen
+        this.setAddressWindow(x, yCur, w, rows);
+        // RAMWR einmal pro Block
+        this.ramwr();
+        // die ersten (rows*w) Pixel aus blockPix senden
+        this.writePixels565(rows === ROWS_PER_BLOCK ? blockPix : blockPix.subarray(0, rows * w));
+        yCur += rows;
+        rowsLeft -= rows;
       }
     } else {
-      if (src.length !== w*h) throw new Error(`src length mismatch`);
-      const MAX_PIX = Math.floor((Number(process.env.SPI_BUFSIZ ?? 4096)) / 2);
-      for (let off = 0; off < src.length; off += MAX_PIX) {
-        this.writePixels565(src.subarray(off, Math.min(off + MAX_PIX, src.length)));
-      }
+      // Pixel-Array
+      if (src.length !== w * h) throw new Error(`src length mismatch`);
 
+      let rowsLeft = h;
+      let yCur = y;
+      let srcOff = 0;
+
+      while (rowsLeft > 0) {
+        const rows = Math.min(rowsLeft, ROWS_PER_BLOCK);
+        this.setAddressWindow(x, yCur, w, rows);
+        this.ramwr();
+        const slice = src.subarray(srcOff, srcOff + rows * w);
+        this.writePixels565(slice);
+        yCur += rows;
+        srcOff += rows * w;
+        rowsLeft -= rows;
+      }
     }
   }
 

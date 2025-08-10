@@ -1,7 +1,7 @@
 // src/index.ts
-export * from "./st7735.js";
+export * from "./st7789.ts";
 
-import { ST7735, toRGB565, rgba } from "./st7735.js";
+import { ST7789, toRGB565, rgba } from "./st7789.ts";
 
 // Direktstart-Check (ESM)
 const isDirect = (() => {
@@ -13,9 +13,9 @@ const isDirect = (() => {
 
 if (isDirect) {
   (async () => {
-    const lcd = new ST7735({
-      width: 640,
-      height: 480,
+    const lcd = new ST7789({
+      width: 240,
+      height: 320,
       device: "/dev/spidev0.0",
       mode: 0,
       bits: 8,

@@ -63,11 +63,17 @@ export function spiOpen(dev: string, mode=0, bitsPerWord=8, speedHz=20_000_000):
   if (libc.symbols.ioctl(fd, Number(SPI_IOC_WR_MAX_SPEED_HZ), u32buf(speedHz)) !== 0)
     throw new Error("ioctl WR_MAX_SPEED_HZ failed");
 
-  function write(buf: Uint8Array): number {
-    const n = libc.symbols.write(fd, buf, buf.byteLength);
-    if (Number(n) < 0) throw new Error("spi write failed");
-    return Number(n);
-  }
+    function write(buf: Uint8Array): number {
+      let total = 0;
+      while (total < buf.byteLength) {
+        const slice = buf.subarray(total);
+        const n = libc.symbols.write(fd, slice, slice.byteLength);
+        const wrote = Number(n);
+        if (wrote < 0) throw new Error("spi write failed");
+        total += wrote;
+      }
+      return total;
+    }
   function close(){ libc.symbols.close(fd); }
 
   return { fd, mode, bits: bitsPerWord, speedHz, write, close };
