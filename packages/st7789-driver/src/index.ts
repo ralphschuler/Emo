@@ -135,7 +135,7 @@ if (isDirect) {
       resetPin: 27,
       backlightPin: 18,
       invert: true,
-      rotation: 270,
+      rotation: 0,
       colOffset: 0,
       rowOffset: 0,
     });
