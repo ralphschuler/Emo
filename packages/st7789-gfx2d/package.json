@@ -1,5 +1,5 @@
 {
-  "name": "st7789-driver",
+  "name": "st7789-gfx2d",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -26,6 +26,6 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-
+    "st7789-driver": "workspace:*"
   }
 }

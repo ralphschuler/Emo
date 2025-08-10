@@ -17,6 +17,7 @@ const isDirect = (() => {
 if (isDirect) {
   const speedHz = Number(getArg("speed", "80000000"));
   const rotation = Number(getArg("rotation", "0")) as 0|1|2|3;
+  const tileSize = Number(getArg("tile", "16"));
 
   const lcd = new ST7789({
     width: 240,
@@ -35,7 +36,7 @@ if (isDirect) {
     rowOffset: 0,
   });
 
-  runDemo(lcd).catch(err => {
+  runDemo(lcd, tileSize).catch(err => {
     console.error("Demo error:", err);
     try { lcd.setBacklight(false); } catch {}
     lcd.dispose();

@@ -2,6 +2,6 @@
   "name": "james-botler",
   "private": true,
   "workspaces": [
-    "packages"
+    "packages/*"
   ]
 }
