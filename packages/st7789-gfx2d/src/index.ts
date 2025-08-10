@@ -1,3 +1,5 @@
+export * from "./gfx2d.ts"
+
 import { ST7789 } from "st7789-driver";
 import { runDemo } from "./demo.ts";
 

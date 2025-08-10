@@ -1,4 +1,6 @@
-import { ST7789 } from "st7789-driver";
+export * from "./st7789.ts";
+
+import { ST7789 } from "./st7789.ts";
 import { runDemo } from "./demo.ts";
 
 function getArg(name:string, def:string){
