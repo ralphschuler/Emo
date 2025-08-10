@@ -126,10 +126,10 @@ export class ST7735 {
     this.spi = spiOpen(dev, mode, bits, speed);
 
     const chip = this.opts.gpioChip ?? "gpiochip0";
-    this.dc = new GpioLine(chip, this.opts.dcPin, "st7735-dc");
-    this.rst = new GpioLine(chip, this.opts.resetPin, "st7735-rst");
+    this.dc = new GpioLine(chip, this.opts.dcPin, "st7789-dc");
+    this.rst = new GpioLine(chip, this.opts.resetPin, "st7789-rst");
     if (typeof this.opts.backlightPin === "number") {
-      this.bl = new GpioLine(chip, this.opts.backlightPin, "st7735-bl");
+      this.bl = new GpioLine(chip, this.opts.backlightPin, "st7789-bl");
     }
 
     // Hardware-Reset
@@ -137,39 +137,80 @@ export class ST7735 {
     this.rst.low();  this.sleep(20);
     this.rst.high(); this.sleep(120);
 
-    // Init-Sequence
-    this.writeCmdByte(CMD.SWRESET); this.sleep(150);
-    this.writeCmdByte(CMD.SLPOUT);  this.sleep(120);
+    // --- ST7789 init ---
+    // Sleep out
+    this.writeCmdByte(0x11 /* SLPOUT */);
+    this.sleep(120);
 
-    this.writeCmdByte(CMD.COLMOD);  this.writeDataBytes([0x05]); this.sleep(10);
+    // Farbformat: 16-bit (RGB565)
+    this.writeCmdByte(0x3A /* COLMOD */);
+    this.writeDataBytes([0x55]); // 16bpp
+    this.sleep(10);
 
-    this.writeCmdByte(CMD.FRMCTR1); this.writeDataBytes([0x01,0x2c,0x2d]);
-    this.writeCmdByte(CMD.FRMCTR2); this.writeDataBytes([0x01,0x2c,0x2d]);
-    this.writeCmdByte(CMD.FRMCTR3); this.writeDataBytes([0x01,0x2c,0x2d,0x01,0x2c,0x2d]);
+    // Porch control
+    this.writeCmdByte(0xB2 /* PORCTRL */);
+    this.writeDataBytes([0x0C, 0x0C, 0x00, 0x33, 0x33]);
 
-    this.writeCmdByte(CMD.INVCTR);  this.writeDataBytes([0x07]);
+    // Gate control
+    this.writeCmdByte(0xB7 /* GCTRL */);
+    this.writeDataBytes([0x35]);
 
-    this.writeCmdByte(CMD.PWCTR1);  this.writeDataBytes([0xa2,0x02,0x84]);
-    this.writeCmdByte(CMD.PWCTR2);  this.writeDataBytes([0xc5]);
-    this.writeCmdByte(CMD.PWCTR3);  this.writeDataBytes([0x0a,0x00]);
-    this.writeCmdByte(CMD.PWCTR4);  this.writeDataBytes([0x8a,0x2a]);
-    this.writeCmdByte(CMD.PWCTR5);  this.writeDataBytes([0x8a,0xee]);
+    // VCOMS
+    this.writeCmdByte(0xBB);
+    this.writeDataBytes([0x19]);
 
-    this.writeCmdByte(CMD.VMCTR1);  this.writeDataBytes([0x0e]);
+    // LCMCTRL
+    this.writeCmdByte(0xC0);
+    this.writeDataBytes([0x2C]);
 
-    // Gamma
-    this.writeCmdByte(CMD.GMCTRP1);
-    this.writeDataBytes([0x0f,0x1a,0x0f,0x18,0x2f,0x28,0x20,0x22,0x1f,0x1b,0x23,0x37,0x00,0x07,0x02,0x10]);
-    this.writeCmdByte(CMD.GMCTRN1);
-    this.writeDataBytes([0x0f,0x1b,0x0f,0x17,0x33,0x2c,0x29,0x2e,0x30,0x30,0x39,0x3f,0x00,0x07,0x03,0x10]);
+    // VDV/VRH enable
+    this.writeCmdByte(0xC2 /* VDVVRHEN */);
+    this.writeDataBytes([0x01]);
 
+    // VRHS
+    this.writeCmdByte(0xC3);
+    this.writeDataBytes([0x12]);
+
+    // VDV Set
+    this.writeCmdByte(0xC4);
+    this.writeDataBytes([0x20]);
+
+    // Frame rate
+    this.writeCmdByte(0xC6 /* FRCTRL2 */);
+    this.writeDataBytes([0x0F]);
+
+    // Power control
+    this.writeCmdByte(0xD0 /* PWCTRL1 */);
+    this.writeDataBytes([0xA4, 0xA1]);
+
+    // Inversion (Waveshare 2" will das üblicherweise)
+    if (this.opts.invert) this.writeCmdByte(0x21 /* INVON */);
+    else this.writeCmdByte(0x20 /* INVOFF */);
+
+    // Gamma (optionale, brauchbare Kurven)
+    this.writeCmdByte(0xE0 /* PVGAMCTRL */);
+    this.writeDataBytes([
+      0xD0,0x04,0x0D,0x11,0x13,0x2B,0x3F,0x54,0x4C,0x18,0x0D,0x0B,0x1F,0x23
+    ]);
+    this.writeCmdByte(0xE1 /* NVGAMCTRL */);
+    this.writeDataBytes([
+      0xD0,0x04,0x0C,0x11,0x13,0x2C,0x3F,0x44,0x51,0x2F,0x1F,0x1F,0x20,0x23
+    ]);
+
+    // Fenster auf vollen Screen setzen (0..239 / 0..319)
+    this.writeCmdByte(0x2A /* CASET */);
+    this.writeDataBytes([0x00,0x00, 0x00,0xEF]); // 0..239
+    this.writeCmdByte(0x2B /* RASET */);
+    this.writeDataBytes([0x00,0x00, 0x01,0x3F]); // 0..319
+
+    // Rotation (MADCTL) – unten
     this.setRotation(this.rotation);
 
-    if (this.opts.invert) this.writeCmdByte(CMD.INVON);
-    else this.writeCmdByte(CMD.INVOFF);
+    // Display ON
+    this.writeCmdByte(0x29 /* DISPON */);
+    this.sleep(100);
 
-    this.writeCmdByte(CMD.DISPON); this.sleep(100);
-
+    // Clear
     this.fillScreen(0x0000);
   }
 
@@ -181,8 +222,8 @@ export class ST7735 {
   setRotation(rot: ST7735Rotation) {
     this.rotation = rot;
     let madctl = 0x00;
-    // Optional BGR-Bit je nach Modul:
-    // madctl |= 0x08;
+    madctl |= 0x08;
+
     switch (rot) {
       case 0:   madctl |= 0x00; break;
       case 90:  madctl |= 0x60; break; // MV|MX

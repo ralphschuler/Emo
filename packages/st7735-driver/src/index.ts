@@ -14,8 +14,8 @@ const isDirect = (() => {
 if (isDirect) {
   (async () => {
     const lcd = new ST7735({
-      width: 128,
-      height: 160,
+      width: 640,
+      height: 480,
       device: "/dev/spidev0.0",
       mode: 0,
       bits: 8,
@@ -25,8 +25,8 @@ if (isDirect) {
       resetPin: 27,
       backlightPin: 18,
       invert: true,
-      rotation: 0,
-      // colOffset: 2, rowOffset: 1, // falls dein Panel Offsets braucht
+      rotation: 270,
+      colOffset: 0, rowOffset: 0,
     });
 
     try {
