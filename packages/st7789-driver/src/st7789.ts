@@ -5,10 +5,10 @@ export type RGBA = { r: number; g: number; b: number; a?: number };
 export const rgba = (r:number,g:number,b:number,a=255):RGBA=>({r,g,b,a});
 export const toRGB565 = (c: RGBA | number) => {
   if (typeof c === "number") return c & 0xffff;
-  const r = (c.r & 0xff) >> 3;
-  const g = (c.g & 0xff) >> 2;
+  const r = (c.r & 0xf8) << 8;
+  const g = (c.g & 0xfc) << 3;
   const b = (c.b & 0xff) >> 3;
-  return (r << 11) | (g << 5) | b;
+  return r | g | b;
 };
 
 const CMD = {
@@ -102,6 +102,7 @@ export class ST7789 {
     const out = new Uint8Array(pix.length * 2);
     for (let i = 0, j = 0; i < pix.length; i++) {
       const v = pix[i];
+      // ST7789 expects big-endian byte order (MSB first)
       out[j++] = (v >> 8) & 0xff;
       out[j++] = v & 0xff;
     }
