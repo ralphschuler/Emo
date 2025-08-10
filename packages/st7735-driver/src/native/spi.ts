@@ -1,12 +1,16 @@
-import { dlopen, FFIType, ptr, CString } from "bun:ffi";
+import { FFIType, ptr, CString } from "bun:ffi";
+import { dlopenFirst } from "./dlopen.js";
 
-// libc: open, close, ioctl, write
-const libc = dlopen(null, {
-  open:   { args: [FFIType.cstring, FFIType.i32], returns: FFIType.i32 },
-  close:  { args: [FFIType.i32], returns: FFIType.i32 },
-  ioctl:  { args: [FFIType.i32, FFIType.u64, FFIType.ptr], returns: FFIType.i32 },
-  write:  { args: [FFIType.i32, FFIType.ptr, FFIType.usize], returns: FFIType.isize },
-});
+const libc = dlopenFirst(
+  // häufigste Kandidaten:
+  ["libc.so.6", "libc.so"],
+  {
+    open:  { args: [FFIType.cstring, FFIType.i32], returns: FFIType.i32 },
+    close: { args: [FFIType.i32], returns: FFIType.i32 },
+    ioctl: { args: [FFIType.i32, FFIType.u64, FFIType.ptr], returns: FFIType.i32 },
+    write: { args: [FFIType.i32, FFIType.ptr, FFIType.usize], returns: FFIType.isize },
+  }
+);
 
 // Flags for open()
 const O_RDWR = 0x0002;

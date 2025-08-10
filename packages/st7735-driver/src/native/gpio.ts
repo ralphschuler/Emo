@@ -1,14 +1,18 @@
-import { dlopen, FFIType, ptr, CString } from "bun:ffi";
+import { FFIType, CString } from "bun:ffi";
+import { dlopenFirst } from "./dlopen.js";
 
-// libgpiod v2 API (Debian bookworm/bullseye: libgpiod.so.2)
-const gpiod = dlopen("libgpiod.so.2", {
-  gpiod_chip_open_by_name: { args: [FFIType.cstring], returns: FFIType.ptr },
-  gpiod_chip_close:        { args: [FFIType.ptr], returns: FFIType.void },
-  gpiod_line_request_output: { args: [FFIType.ptr, FFIType.cstring, FFIType.i32], returns: FFIType.i32 },
-  gpiod_line_release:      { args: [FFIType.ptr], returns: FFIType.void },
-  gpiod_line_set_value:    { args: [FFIType.ptr, FFIType.i32], returns: FFIType.i32 },
-  gpiod_chip_get_line:     { args: [FFIType.ptr, FFIType.u32], returns: FFIType.ptr },
-});
+const gpiod = dlopenFirst(
+  // Reihenfolge: v2 ist häufig, fallback auf .so.1 / .so
+  ["libgpiod.so.2", "libgpiod.so.1", "libgpiod.so"],
+  {
+    gpiod_chip_open_by_name:  { args: [FFIType.cstring], returns: FFIType.ptr },
+    gpiod_chip_close:         { args: [FFIType.ptr], returns: FFIType.void },
+    gpiod_line_request_output:{ args: [FFIType.ptr, FFIType.cstring, FFIType.i32], returns: FFIType.i32 },
+    gpiod_line_release:       { args: [FFIType.ptr], returns: FFIType.void },
+    gpiod_line_set_value:     { args: [FFIType.ptr, FFIType.i32], returns: FFIType.i32 },
+    gpiod_chip_get_line:      { args: [FFIType.ptr, FFIType.u32], returns: FFIType.ptr },
+  }
+);
 
 // Konstanten
 const GPIOD_LINE_VALUE_ACTIVE = 1;
