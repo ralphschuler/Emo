@@ -8,9 +8,9 @@ const libc = dlopenFirst(["libc.so.6", "libc.so"], {
   close: { args: [FFIType.i32], returns: FFIType.i32 },
   // ioctl:  int ioctl(int fd, unsigned long request, void *argp)
   // -> request Breite variiert (32/64). "usize" ist hier die robustere Wahl.
-  ioctl: { args: [FFIType.i32, FFIType.usize, FFIType.ptr], returns: FFIType.i32 },
+  ioctl: { args: [FFIType.i32, FFIType.u64, FFIType.ptr], returns: FFIType.i32 },
   // write:  ssize_t write(int fd, const void *buf, size_t count)
-  write: { args: [FFIType.i32, FFIType.ptr, FFIType.usize], returns: FFIType.isize },
+  write: { args: [FFIType.i32, FFIType.ptr, FFIType.u64], returns: FFIType.i64 },
 });
 
 const O_RDWR = 0x0002;
@@ -43,7 +43,7 @@ export interface SPIHandle {
   mode: number;
   bits: number;
   speedHz: number;
-  write(buf: Uint8Array): number;
+  write(buf: Uint8Array | ArrayBuffer): number;
   close(): void;
 }
 
@@ -51,7 +51,7 @@ export function spiOpen(dev: string, mode=0, bitsPerWord=8, speedHz=20_000_000):
   // JS-String -> null-terminierter UTF-8 Buffer → direkt als TypedArray übergeben
   const devBuf = new TextEncoder().encode(dev + "\0");
   const fd = libc.symbols.open(devBuf, O_RDWR);
-  if (fd < 0) throw new Error(`spiOpen: cannot open ${dev}`);
+  if (!fd || fd < 0) throw new Error(`spiOpen: cannot open ${dev}`);
 
   // mode
   if (libc.symbols.ioctl(fd, Number(SPI_IOC_WR_MODE), u8buf(mode)) !== 0)

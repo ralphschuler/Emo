@@ -1,4 +1,3 @@
-// src/st7735.ts
 import { spiOpen, type SPIHandle } from "./native/spi.js";
 import { GpioLine } from "./native/gpio.js";
 

@@ -1,5 +1,5 @@
 // src/native/gpio.ts
-import { FFIType, type Pointer } from "bun:ffi";
+import { FFIType } from "bun:ffi";
 import { dlopenFirst } from "./dlopen.js";
 
 const gpiod = dlopenFirst(
@@ -15,15 +15,17 @@ const gpiod = dlopenFirst(
 );
 
 export class GpioLine {
-  private chip: Pointer;
-  private line: Pointer;
+  private chip: number;
+  private line: number;
   constructor(chipName: string, lineOffset: number, label = "st7735-bun") {
     const chipNameBuf = new TextEncoder().encode(chipName + "\0");
-    this.chip = gpiod.symbols.gpiod_chip_open_by_name(chipNameBuf);
-    if (!this.chip) throw new Error(`gpiod: open chip ${chipName} failed`);
+    const chip = gpiod.symbols.gpiod_chip_open_by_name(chipNameBuf);
+    if (!chip) throw new Error(`gpiod_chip_open_by_name("${chipName}") returned null/0`);
+    this.chip = chip;
 
-    this.line = gpiod.symbols.gpiod_chip_get_line(this.chip, lineOffset >>> 0);
-    if (!this.line) { gpiod.symbols.gpiod_chip_close(this.chip); throw new Error(`gpiod: get line ${lineOffset} failed`); }
+    const line = gpiod.symbols.gpiod_chip_get_line(this.chip, lineOffset >>> 0);
+    if (!line) throw new Error(`gpiod_chip_get_line(${lineOffset}) returned null/0`);
+    this.line = line;
 
     const labelBuf = new TextEncoder().encode(label + "\0");
     const rc = gpiod.symbols.gpiod_line_request_output(this.line, labelBuf, 0 /* LOW */);
