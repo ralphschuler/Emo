@@ -1,5 +1,10 @@
+// src/index.ts
 export * from "./st7789.ts";
 import { ST7789, toRGB565, rgba } from "./st7789.ts";
+
+/* ---------- Utils ---------- */
+
+const clamp = (v:number, lo:number, hi:number)=>Math.max(lo, Math.min(hi, v));
 
 function hsvToRgb(h: number, s: number, v: number) {
   const c = v * s;
@@ -14,7 +19,8 @@ function hsvToRgb(h: number, s: number, v: number) {
   else             { r=c; g=0; b=x; }
   return { r: Math.round((r+m)*255), g: Math.round((g+m)*255), b: Math.round((b+m)*255) };
 }
-const clamp = (v:number, lo:number, hi:number)=>Math.max(lo, Math.min(hi, v));
+
+/* ---------- FPS & Double Buffer ---------- */
 
 class FpsCounter {
   private last = Date.now();
@@ -44,6 +50,8 @@ class DoubleBuffer {
     this.front ^= 1;
   }
 }
+
+/* ---------- 16-bit Drawing ---------- */
 
 function fillRect16(buf: Uint16Array, W:number, H:number, x:number, y:number, w:number, h:number, color:number) {
   const x0 = clamp(x|0, 0, W), y0 = clamp(y|0, 0, H);
@@ -79,6 +87,8 @@ function fillDiamond16(buf: Uint16Array, W:number, H:number, cx:number, cy:numbe
   }
 }
 
+/* ---------- Sprite Demo mit Kollisionen ---------- */
+
 type Shape = "rect" | "circle" | "diamond";
 type Sprite = {
   shape: Shape;
@@ -100,19 +110,67 @@ function drawSprite(buf: Uint16Array, W:number, H:number, s: Sprite, palette:num
   }
 }
 
-function stepSprite(s: Sprite, W:number, H:number): boolean {
-  // bewegt Sprite; gibt true zurück, wenn ein Bounce (Wandkontakt) passiert ist
-  let bounced = false;
-  s.x += s.vx;
-  s.y += s.vy;
-
-  if (s.x < 0)            { s.x = 0;            s.vx = Math.abs(s.vx); bounced = true; }
-  if (s.y < 0)            { s.y = 0;            s.vy = Math.abs(s.vy); bounced = true; }
-  if (s.x + s.w > W)      { s.x = W - s.w;      s.vx = -Math.abs(s.vx); bounced = true; }
-  if (s.y + s.h > H)      { s.y = H - s.h;      s.vy = -Math.abs(s.vy); bounced = true; }
-
-  return bounced;
+/** Kreishülle (Center + Radius) – schnell & ausreichend für bunte Bumper-Cars */
+function hull(s: Sprite) {
+  const r = Math.min(s.w, s.h) / 2;
+  return { cx: s.x + s.w/2, cy: s.y + s.h/2, r };
 }
+
+/** Wand-Kollision (mit Farbwechsel) */
+function collideWalls(s: Sprite, W:number, H:number, onBounce:()=>void) {
+  let bounced = false;
+  if (s.x < 0) { s.x = 0; s.vx = Math.abs(s.vx); bounced = true; }
+  if (s.y < 0) { s.y = 0; s.vy = Math.abs(s.vy); bounced = true; }
+  if (s.x + s.w > W) { s.x = W - s.w; s.vx = -Math.abs(s.vx); bounced = true; }
+  if (s.y + s.h > H) { s.y = H - s.h; s.vy = -Math.abs(s.vy); bounced = true; }
+  if (bounced) onBounce();
+}
+
+/** Sprite-Sprite-Kollision (elastisch, gleiche Masse) mit Entzerrung & Farbwechsel */
+function collideSprites(a: Sprite, b: Sprite, onBounce:()=>void) {
+  const ha = hull(a), hb = hull(b);
+  let nx = hb.cx - ha.cx;
+  let ny = hb.cy - ha.cy;
+  const dist2 = nx*nx + ny*ny;
+  const r = ha.r + hb.r;
+
+  if (dist2 === 0) {
+    // Perfekte Überlappung – leicht auseinander schieben
+    nx = 1; ny = 0;
+  }
+  const dist = Math.sqrt(dist2 || 1);
+
+  if (dist < r) {
+    // Penetration auflösen (je zur Hälfte entlang der Normalen)
+    const pen = r - dist;
+    const invDist = 1 / (dist || 1);
+    const ux = nx * invDist, uy = ny * invDist;
+
+    a.x -= ux * (pen * 0.5);
+    a.y -= uy * (pen * 0.5);
+    b.x += ux * (pen * 0.5);
+    b.y += uy * (pen * 0.5);
+
+    // Geschwindigkeiten entlang der Kollisionsnormalen tauschen (equal mass, elastisch)
+    const va_n = a.vx * ux + a.vy * uy;
+    const vb_n = b.vx * ux + b.vy * uy;
+
+    const va_t_x = a.vx - va_n * ux;
+    const va_t_y = a.vy - va_n * uy;
+    const vb_t_x = b.vx - vb_n * ux;
+    const vb_t_y = b.vy - vb_n * uy;
+
+    // swap normal components
+    a.vx = va_t_x + vb_n * ux;
+    a.vy = va_t_y + vb_n * uy;
+    b.vx = vb_t_x + va_n * ux;
+    b.vy = vb_t_y + va_n * uy;
+
+    onBounce();
+  }
+}
+
+/* ---------- Hauptprogramm ---------- */
 
 const isDirect = (() => {
   try {
@@ -135,7 +193,7 @@ if (isDirect) {
       resetPin: 27,
       backlightPin: 18,
       invert: true,
-      rotation: 0,
+      rotation: 270,
       colOffset: 0,
       rowOffset: 0,
     });
@@ -147,7 +205,7 @@ if (isDirect) {
       const W = lcd.width, H = lcd.height;
       const bg = toRGB565(rgba(0,0,0));
 
-      // 6 deutlich unterscheidbare Farben (HSV gleichmäßig verteilt)
+      // 6 knallige Farben
       const palette = [0,60,120,180,240,300].map(h => {
         const {r,g,b} = hsvToRgb(h, 1, 1);
         return toRGB565(rgba(r,g,b));
@@ -156,7 +214,6 @@ if (isDirect) {
       const dbuf = new DoubleBuffer(lcd);
       const fps = new FpsCounter();
 
-      // Ein paar Sprites mit verschiedenen Formen
       const sprites: Sprite[] = [
         { shape: "rect",    x: 10,  y: 20,  w: 40, h: 28, vx:  2.2, vy:  1.7, colorIndex: 0 },
         { shape: "circle",  x: 80,  y: 60,  w: 32, h: 32, vx: -1.6, vy:  2.0, colorIndex: 1 },
@@ -166,26 +223,45 @@ if (isDirect) {
         { shape: "diamond", x: 170, y: 110, w: 30, h: 30, vx: -1.5, vy:  1.5, colorIndex: 5 },
       ];
 
-      // Hauptloop: Frame zeichnen → präsentieren → FPS zählen
-      while (true) {
-        // Hintergrund schwarz
-        dbuf.clear(bg);
+      const onBounce = (s: Sprite) => { s.colorIndex = (s.colorIndex + 1) % palette.length; };
 
-        // Sprites updaten/zeichnen
+      while (true) {
+        // 1) Bewegung
         for (const s of sprites) {
-          const bounced = stepSprite(s, W, H);
-          if (bounced) {
-            // Farbe langsam „weiterdrehen“: zur nächsten Palette springen
-            s.colorIndex = (s.colorIndex + 1) % palette.length;
-          }
-          drawSprite(dbuf.draw, W, H, s, palette);
+          s.x += s.vx; s.y += s.vy;
         }
 
-        // anzeigen & FPS
+        // 2) Wände
+        for (const s of sprites) {
+          collideWalls(s, W, H, () => onBounce(s));
+        }
+
+        // 3) Paarweise Sprite-Kollisionen
+        for (let i=0; i<sprites.length; i++){
+          for (let j=i+1; j<sprites.length; j++){
+            const si = sprites[i], sj = sprites[j];
+            let collided = false;
+            const beforeVi = { x: si.vx, y: si.vy };
+            const beforeVj = { x: sj.vx, y: sj.vy };
+
+            collideSprites(si, sj, () => { collided = true; });
+
+            if (collided) {
+              // Bei Kollision beide färben (aber nur wenn sich tatsächlich was geändert hat)
+              if (si.vx !== beforeVi.x || si.vy !== beforeVi.y) onBounce(si);
+              if (sj.vx !== beforeVj.x || sj.vy !== beforeVj.y) onBounce(sj);
+            }
+          }
+        }
+
+        // 4) Rendern
+        dbuf.clear(bg);
+        for (const s of sprites) {
+          drawSprite(dbuf.draw, W, H, s, palette);
+        }
         dbuf.present();
         fps.tick();
 
-        // Kooperatives Yield
         await new Promise(r=>setTimeout(r, 0));
       }
     } catch (e) {
