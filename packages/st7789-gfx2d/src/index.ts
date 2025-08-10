@@ -17,7 +17,7 @@ const isDirect = (() => {
 })();
 
 if (isDirect) {
-  const speedHz = Number(getArg("speed", "80000000"));
+  const speedHz = Number(getArg("speed", "1024000000"));
   const rotation = Number(getArg("rotation", "0")) as 0|1|2|3;
   const tileSize = Number(getArg("tile", "16"));
 
