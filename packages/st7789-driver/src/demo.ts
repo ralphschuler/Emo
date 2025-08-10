@@ -1,4 +1,4 @@
-import { ST7789, toRGB565, rgba } from "st7789-driver";
+import { ST7789, toRGB565, rgba } from "./st7789.ts";
 
 function hsvToRgb(h: number, s: number, v: number) {
   const c = v * s;
@@ -38,7 +38,7 @@ class FpsCounter {
   }
 }
 
-export async function runDemo(lcd: ST7789) {
+export async function runDemo(lcd: ST7789, hueSpeed: number) {
   lcd.init();
   lcd.setBacklight(true);
 

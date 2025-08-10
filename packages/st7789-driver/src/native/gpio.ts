@@ -1,5 +1,5 @@
 // src/native/gpio.ts
-import { FFIType } from "bun:ffi";
+import { FFIType, type Pointer } from "bun:ffi";
 import { dlopenFirst } from "./dlopen.js";
 
 const gpiod = dlopenFirst(

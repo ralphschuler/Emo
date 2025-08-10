@@ -1,6 +1,6 @@
 export * from "./st7789.ts";
 
-import { ST7789 } from "./st7789.ts";
+import { ST7789, type ST7789Rotation } from "./st7789.ts";
 import { runDemo } from "./demo.ts";
 
 function getArg(name:string, def:string){
@@ -18,7 +18,8 @@ const isDirect = (() => {
 
 if (isDirect) {
   const speedHz = Number(getArg("speed", "80000000"));
-  const rotation = Number(getArg("rotation", "0")) as 0|1|2|3;
+  const rotation = Number(getArg("rotation", "0")) as ST7789Rotation;
+  const hueSpeed = Number(getArg("hueSpeed", "20"));
 
   const lcd = new ST7789({
     width: 240,
@@ -37,7 +38,7 @@ if (isDirect) {
     rowOffset: 0,
   });
 
-  runDemo(lcd).catch(err => {
+  runDemo(lcd, hueSpeed).catch(err => {
     console.error("Demo error:", err);
     try { lcd.setBacklight(false); } catch {}
     lcd.dispose();
