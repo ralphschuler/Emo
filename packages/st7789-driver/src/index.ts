@@ -187,7 +187,7 @@ if (isDirect) {
       device: "/dev/spidev0.0",
       mode: 0,
       bits: 8,
-      speedHz: 32_000_000,
+      speedHz: 64_000_000,
       gpioChip: "gpiochip0",
       dcPin: 25,
       resetPin: 27,
