@@ -1,6 +1,6 @@
 export * from "./gfx2d.ts"
 
-import { ST7789 } from "st7789-driver";
+import { ST7789, type ST7789Rotation } from "st7789-driver";
 import { runDemo } from "./demo.ts";
 
 function getArg(name:string, def:string){
@@ -17,8 +17,8 @@ const isDirect = (() => {
 })();
 
 if (isDirect) {
-  const speedHz = Number(getArg("speed", "1024000000"));
-  const rotation = Number(getArg("rotation", "0")) as 0|1|2|3;
+  const speedHz = Number(getArg("speed", "512000000"));
+  const rotation = Number(getArg("rotation", "0")) as ST7789Rotation;
   const tileSize = Number(getArg("tile", "16"));
 
   const lcd = new ST7789({

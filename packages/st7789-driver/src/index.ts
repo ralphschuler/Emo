@@ -17,7 +17,7 @@ const isDirect = (() => {
 })();
 
 if (isDirect) {
-  const speedHz = Number(getArg("speed", "1024000000"));
+  const speedHz = Number(getArg("speed", "512000000"));
   const rotation = Number(getArg("rotation", "0")) as ST7789Rotation;
   const hueSpeed = Number(getArg("hueSpeed", "100"));
 
