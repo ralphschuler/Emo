@@ -200,7 +200,7 @@ if (isDirect) {
 
     try {
       lcd.init();
-      lcd.setBacklight(true);
+      lcd.setBacklight(false);
 
       const W = lcd.width, H = lcd.height;
       const bg = toRGB565(rgba(0,0,0));
