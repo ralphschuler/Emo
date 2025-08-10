@@ -106,9 +106,9 @@ export class ST7789 {
       out[j++] = v & 0xff;
     }
     const MAX_SPI_BYTES = Number(process.env.SPI_BUFSIZ ?? 4096);
+    this.dc.high();
     for (let off = 0; off < out.length; off += MAX_SPI_BYTES) {
       const chunk = out.subarray(off, Math.min(off + MAX_SPI_BYTES, out.length));
-      this.dc.high();
       this.spi.write(chunk);
     }
   }

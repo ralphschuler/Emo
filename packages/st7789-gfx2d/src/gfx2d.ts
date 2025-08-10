@@ -216,17 +216,34 @@ export class Gfx2D {
     const key = opts?.key;
     const tint = opts?.tint;
     const W=this.W,H=this.H;
-    for (let y=0; y<sh; y++){
-      const yy = dy + y; if (yy<0||yy>=H) continue;
-      const syy = sy + y;
-      for (let x=0; x<sw; x++){
-        const xx = dx + x; if (xx<0||xx>=W) continue;
-        const sCol = src[syy*sw + (sx + x)];
-        if (key !== undefined && sCol === key) continue;
-        const srcTinted = tint ? this.modulate565(sCol, tint) : sCol;
-        const off = yy*W + xx;
-        if (alpha===255) this.buf[off] = srcTinted;
-        else this.buf[off] = this.blend565(srcTinted, this.buf[off], alpha);
+    if (alpha === 255){
+      for (let y=0; y<sh; y++){
+        const yy = dy + y; if (yy<0||yy>=H) continue;
+        const syy = sy + y;
+        const srcRow = syy*sw + sx;
+        const dstRow = yy*W + dx;
+        for (let x=0; x<sw; x++){
+          const xx = dx + x; if (xx<0||xx>=W) continue;
+          const sCol = src[srcRow + x];
+          if (key !== undefined && sCol === key) continue;
+          const srcTinted = tint ? this.modulate565(sCol, tint) : sCol;
+          this.buf[dstRow + x] = srcTinted;
+        }
+      }
+    } else {
+      for (let y=0; y<sh; y++){
+        const yy = dy + y; if (yy<0||yy>=H) continue;
+        const syy = sy + y;
+        const srcRow = syy*sw + sx;
+        const dstRow = yy*W + dx;
+        for (let x=0; x<sw; x++){
+          const xx = dx + x; if (xx<0||xx>=W) continue;
+          const sCol = src[srcRow + x];
+          if (key !== undefined && sCol === key) continue;
+          const srcTinted = tint ? this.modulate565(sCol, tint) : sCol;
+          const off = dstRow + x;
+          this.buf[off] = this.blend565(srcTinted, this.buf[off], alpha);
+        }
       }
     }
   }
