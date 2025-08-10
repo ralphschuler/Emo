@@ -1,32 +1,32 @@
-export * from "./st7735.ts";
+// src/index.ts
+export * from "./st7735.js";
 
-import { ST7735, toRGB565, rgba } from "./st7735.ts";
+import { ST7735, toRGB565, rgba } from "./st7735.js";
 
+// Direktstart-Check (ESM)
 const isDirect = (() => {
   try {
     const entry = process.argv[1] ? new URL(`file://${process.argv[1]}`) : null;
     return entry && entry.href === import.meta.url;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 })();
 
 if (isDirect) {
   (async () => {
-    // — Demo-Parameter: passe Pins & Offsets an dein Board an —
     const lcd = new ST7735({
       width: 128,
       height: 160,
-      chipSelect: 0,
-      spiMode: 0,
-      clockDivider: 12, // 250MHz/12 ~ 20.8MHz
+      device: "/dev/spidev0.0",
+      mode: 0,
+      bits: 8,
+      speedHz: 20_000_000,   // teste ggf. 24–32 MHz, wenn stabil
+      gpioChip: "gpiochip0",
       dcPin: 25,
       resetPin: 27,
       backlightPin: 18,
       invert: true,
       rotation: 0,
-      // colOffset: 2,
-      // rowOffset: 1,
+      // colOffset: 2, rowOffset: 1, // falls dein Panel Offsets braucht
     });
 
     try {
@@ -35,42 +35,37 @@ if (isDirect) {
 
       const W = lcd.width, H = lcd.height;
 
-      // 1) Farbverlauf-Vollbild
-      const buf = new Uint16Array(W * H);
-      for (let y = 0; y < H; y++) {
-        for (let x = 0; x < W; x++) {
-          const r = (x / (W - 1)) * 255;
-          const g = (y / (H - 1)) * 255;
-          const b = 180;
-          buf[y * W + x] = toRGB565(rgba(r | 0, g | 0, b));
+      // Farbverlauf
+      const grad = new Uint16Array(W * H);
+      for (let y=0; y<H; y++) {
+        for (let x=0; x<W; x++) {
+          grad[y*W+x] = toRGB565(rgba((x/(W-1))*255|0, (y/(H-1))*255|0, 180));
         }
       }
-      lcd.pushRect(0, 0, W, H, buf);
+      lcd.pushRect(0,0,W,H,grad);
 
-      // 2) Simple FPS-Loop mit wechselnden Rects
-      let frames = 0;
-      let last = Date.now();
+      // FPS-Loop
+      let frames = 0, last = Date.now();
       const colA = toRGB565(rgba(255, 80, 40));
       const colB = toRGB565(rgba(30, 30, 50));
 
       const loop = () => {
         lcd.fillScreen(colB);
         lcd.pushRect(10, 10, 60, 40, colA);
-        lcd.pushRect(W - 70, H - 50, 60, 40, colA);
+        lcd.pushRect(W-70, H-50, 60, 40, colA);
 
         frames++;
         const now = Date.now();
         if (now - last >= 1000) {
-          const fps = (frames * 1000) / (now - last);
+          const fps = (frames*1000)/(now-last);
           console.log(`FPS: ${fps.toFixed(1)}`);
-          frames = 0;
-          last = now;
+          frames = 0; last = now;
         }
         setImmediate(loop);
       };
       loop();
-    } catch (err) {
-      console.error("Demo error:", err);
+    } catch (e) {
+      console.error("Demo error:", e);
       lcd.dispose();
       process.exit(1);
     }
