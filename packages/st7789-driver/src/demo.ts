@@ -2,14 +2,11 @@ import { ST7789 } from "./st7789.ts";
 
 /** Packt r,g,b in [0..1] direkt nach RGB565 – ohne Umwege. */
 const pack565 = (r: number, g: number, b: number): number => {
-  // minimal clamp, dann direkt auf Bitbreiten skalieren
-  r = r < 0 ? 0 : r > 1 ? 1 : r;
-  g = g < 0 ? 0 : g > 1 ? 1 : g;
-  b = b < 0 ? 0 : b > 1 ? 1 : b;
-  const r5 = (r * 31) | 0;
-  const g6 = (g * 63) | 0;
-  const b5 = (b * 31) | 0;
-  return (r5 << 11) | (g6 << 5) | b5;
+  // minimal clamp, dann auf 0..255 skalieren
+  const R = ((r < 0 ? 0 : r > 1 ? 1 : r) * 255) | 0;
+  const G = ((g < 0 ? 0 : g > 1 ? 1 : g) * 255) | 0;
+  const B = ((b < 0 ? 0 : b > 1 ? 1 : b) * 255) | 0;
+  return ((R & 0xf8) << 8) | ((G & 0xfc) << 3) | (B >> 3);
 };
 
 /** Sehr schnelle HSV→RGB mit s=1; h in [0..360), v in [0..1]. */
