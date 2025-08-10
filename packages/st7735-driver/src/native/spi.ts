@@ -59,7 +59,7 @@ export interface SPIHandle {
 }
 
 export function spiOpen(dev: string, mode = 0, bitsPerWord = 8, speedHz = 20_000_000): SPIHandle {
-  const fd = libc.symbols.open(CString(dev), O_RDWR);
+  const fd = libc.symbols.open(new CString(dev), O_RDWR);
   if (fd < 0) throw new Error(`spiOpen: cannot open ${dev}`);
 
   // mode

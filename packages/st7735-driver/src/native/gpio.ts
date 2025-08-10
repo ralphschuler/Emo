@@ -24,7 +24,7 @@ export class GpioLine {
   private line: Pointer;
   constructor(chipName: string, lineOffset: number, label = "st7735-bun") {
     // chip öffnen
-    this.chip = gpiod.symbols.gpiod_chip_open_by_name(CString(chipName));
+    this.chip = gpiod.symbols.gpiod_chip_open_by_name(new CString(chipName));
     if (!this.chip) throw new Error(`gpiod: open chip ${chipName} failed`);
     // line holen
     this.line = gpiod.symbols.gpiod_chip_get_line(this.chip, lineOffset >>> 0);
@@ -33,7 +33,7 @@ export class GpioLine {
       throw new Error(`gpiod: get line ${lineOffset} failed`);
     }
     // als output requesten (default low)
-    const rc = gpiod.symbols.gpiod_line_request_output(this.line, CString(label), GPIOD_LINE_VALUE_INACTIVE);
+    const rc = gpiod.symbols.gpiod_line_request_output(this.line, new CString(label), GPIOD_LINE_VALUE_INACTIVE);
     if (rc !== 0) {
       gpiod.symbols.gpiod_chip_close(this.chip);
       throw new Error(`gpiod: request output failed for line ${lineOffset}`);
