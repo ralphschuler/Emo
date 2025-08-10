@@ -19,7 +19,7 @@ const isDirect = (() => {
 if (isDirect) {
   const speedHz = Number(getArg("speed", "512000000"));
   const rotation = Number(getArg("rotation", "0")) as ST7789Rotation;
-  const hueSpeed = Number(getArg("hueSpeed", "100"));
+  const hueSpeed = Number(getArg("hueSpeed", "50"));
 
   const lcd = new ST7789({
     width: 240,
