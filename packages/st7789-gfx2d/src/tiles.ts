@@ -18,6 +18,8 @@ export class TileRenderer {
   private tilesX: number;
   private tilesY: number;
   private dirty: Uint8Array;
+  // Reusable scratch buffer for copying tile data
+  private tileBuf: Uint16Array;
   constructor(
     private lcd: ST7789,
     private W: number,
@@ -28,6 +30,8 @@ export class TileRenderer {
     this.tilesX = Math.ceil(W / tileW);
     this.tilesY = Math.ceil(H / tileH);
     this.dirty = new Uint8Array(this.tilesX * this.tilesY);
+    // Allocate maximum tile size once to avoid per-tile allocations
+    this.tileBuf = new Uint16Array(tileW * tileH);
     this.markAll();
   }
   markAll(){ this.dirty.fill(1); }
@@ -44,6 +48,7 @@ export class TileRenderer {
   flush(buf: Uint16Array): number {
     const { tileW, tileH, tilesX, tilesY, W, H } = this;
     let pushedBytes = 0;
+    const scratch = this.tileBuf;
     for (let ty=0; ty<tilesY; ty++){
       for (let tx=0; tx<tilesX; tx++){
         const i = ty * tilesX + tx;
@@ -55,12 +60,12 @@ export class TileRenderer {
         const w = Math.min(tileW, W - x);
         const h = Math.min(tileH, H - y);
 
-        const tile = new Uint16Array(w * h);
+        // Copy region into reusable scratch buffer (stride = tileW)
         for (let yy=0; yy<h; yy++){
           const srcOff = (y + yy) * W + x;
-          tile.set(buf.subarray(srcOff, srcOff + w), yy * w);
+          scratch.set(buf.subarray(srcOff, srcOff + w), yy * tileW);
         }
-        this.lcd.pushRect(x, y, w, h, tile);
+        this.lcd.pushRect(x, y, w, h, scratch.subarray(0, w * h));
         pushedBytes += w * h * 2;
       }
     }
