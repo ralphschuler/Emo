@@ -28,6 +28,6 @@
   },
   "dependencies": {
     "st7789-driver": "workspace:*",
-    "st7789-color": "workspace:*"
+    "color": "workspace:*"
   }
 }

@@ -27,6 +27,6 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "st7789-color": "workspace:*"
+    "color": "workspace:*"
   }
 }

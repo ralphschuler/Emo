@@ -1,4 +1,4 @@
-import { Color565, rgb, blend565, modulate565 } from "st7789-color";
+import { Color565, rgb, blend565, modulate565 } from "color";
 import { clamp } from "./util";
 
 /** Minimal 5x7 ASCII Font (32..126). Each char: 5 columns, 7 rows, LSB top. */
