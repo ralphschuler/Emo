@@ -1,4 +1,6 @@
-export * from "./gfx2d.ts"
+export * from "./gfx2d.ts";
+export * from "color";
+export * from "./util.ts";
 
 import { ST7789, type ST7789Rotation } from "st7789-driver";
 import { runDemo } from "./demo.ts";

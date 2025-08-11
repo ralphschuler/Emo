@@ -1,5 +1,5 @@
 {
-  "name": "st7789-driver",
+  "name": "color",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -17,7 +17,7 @@
     "dev": "bun run --watch src/index.ts",
     "test": "bun test"
   },
-  "keywords": ["st7789", "tft", "spi", "gpio", "raspberry-pi", "rpio", "typescript", "esm"],
+  "keywords": ["color", "utility", "typescript", "esm"],
   "license": "MIT",
   "devDependencies": {
     "@types/bun": "latest",
@@ -25,8 +25,5 @@
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
-  },
-  "dependencies": {
-    "color": "workspace:*"
   }
 }

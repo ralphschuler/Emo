@@ -1,12 +1,5 @@
-import { toRGB565, rgba } from "st7789-driver";
-
-export type Color565 = number;
-export const rgb = (r: number, g: number, b: number) => toRGB565(rgba(r, g, b));
-export const rgbHex = (hex: number) => {
-  const r = (hex >> 16) & 0xff, g = (hex >> 8) & 0xff, b = hex & 0xff;
-  return rgb(r, g, b);
-};
-export const clamp = (v:number, lo:number, hi:number)=>Math.max(lo, Math.min(hi, v));
+import { Color565, rgb, blend565, modulate565 } from "color";
+import { clamp } from "./util";
 
 /** Minimal 5x7 ASCII Font (32..126). Each char: 5 columns, 7 rows, LSB top. */
 const FONT5x7: Record<string, number[]> = (() => {
@@ -72,21 +65,6 @@ export class Gfx2D {
     return this.buf[y*this.W + x];
   }
 
-  /** Alpha blend (0..255) src over dst (both RGB565) */
-  blend565(src: Color565, dst: Color565, alpha: number): Color565 {
-    if (alpha>=255) return src;
-    if (alpha<=0) return dst;
-    // Expand RGB565 to 8-bit per channel approx, blend, and pack back
-    const sr = (src >> 11) & 0x1f; const sg = (src >> 5) & 0x3f; const sb = src & 0x1f;
-    const dr = (dst >> 11) & 0x1f; const dg = (dst >> 5) & 0x3f; const dbb = dst & 0x1f;
-    const r = (sr*255/31)|0, g = (sg*255/63)|0, b = (sb*255/31)|0;
-    const R = (dr*255/31)|0, G = (dg*255/63)|0, B = (dbb*255/31)|0;
-    const inv = 255 - alpha;
-    const ro = ((r*alpha + R*inv) / 255)|0;
-    const go = ((g*alpha + G*inv) / 255)|0;
-    const bo = ((b*alpha + B*inv) / 255)|0;
-    return rgb(ro,go,bo);
-  }
 
   line(x0:number,y0:number,x1:number,y1:number,color:Color565){
     // Bresenham
@@ -226,7 +204,7 @@ export class Gfx2D {
           const xx = dx + x; if (xx<0||xx>=W) continue;
           const sCol = src[srcRow + x];
           if (key !== undefined && sCol === key) continue;
-          const srcTinted = tint ? this.modulate565(sCol, tint) : sCol;
+            const srcTinted = tint ? modulate565(sCol, tint) : sCol;
           this.buf[dstRow + x] = srcTinted;
         }
       }
@@ -240,9 +218,9 @@ export class Gfx2D {
           const xx = dx + x; if (xx<0||xx>=W) continue;
           const sCol = src[srcRow + x];
           if (key !== undefined && sCol === key) continue;
-          const srcTinted = tint ? this.modulate565(sCol, tint) : sCol;
+            const srcTinted = tint ? modulate565(sCol, tint) : sCol;
           const off = dstRow + x;
-          this.buf[off] = this.blend565(srcTinted, this.buf[off], alpha);
+            this.buf[off] = blend565(srcTinted, this.buf[off], alpha);
         }
       }
     }
@@ -260,18 +238,11 @@ export class Gfx2D {
         const col = rgb(r,g,b);
         const alpha = Math.min(255, ((a * aGlobal) / 255)|0);
         const off = yy*this.W + xx;
-        this.buf[off] = this.blend565(col, this.buf[off], alpha);
+          this.buf[off] = blend565(col, this.buf[off], alpha);
       }
     }
   }
 
-  /** Multiply two RGB565 colors per channel (approx). */
-  private modulate565(a:Color565, b:Color565): Color565 {
-    const ar=(a>>11)&0x1f, ag=(a>>5)&0x3f, ab=a&0x1f;
-    const br=(b>>11)&0x1f, bg=(b>>5)&0x3f, bb=b&0x1f;
-    const r=((ar*br)/31)|0, g=((ag*bg)/63)|0, bl=((ab*bb)/31)|0;
-    return (r<<11)|(g<<5)|bl;
-  }
 
   /** Tiny text draw (5x7 + 1px spacing) */
   text(x:number,y:number,msg:string,color:Color565, scale=1){

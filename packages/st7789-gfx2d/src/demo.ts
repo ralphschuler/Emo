@@ -1,8 +1,8 @@
 import { type ST7789, toRGB565, rgba } from "st7789-driver";
-import { Gfx2D, rgb } from "./gfx2d.ts";
+import { Gfx2D } from "./gfx2d.ts";
+import { rgb } from "color";
 import { DoubleBuffer, TileRenderer } from "./tiles.ts";
 
-const clamp = (v:number, lo:number, hi:number)=>Math.max(lo, Math.min(hi, v));
 
 function hsvToRgb(h: number, s: number, v: number) {
   const c = v * s;
