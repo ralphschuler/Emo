@@ -1,16 +1,6 @@
 import { spiOpen, type SPIHandle } from "./native/spi.js";
 import { GpioLine } from "./native/gpio.js";
 
-export type RGBA = { r: number; g: number; b: number; a?: number };
-export const rgba = (r:number,g:number,b:number,a=255):RGBA=>({r,g,b,a});
-export const toRGB565 = (c: RGBA | number) => {
-  if (typeof c === "number") return c & 0xffff;
-  const r = (c.r & 0xf8) << 8;
-  const g = (c.g & 0xfc) << 3;
-  const b = (c.b & 0xff) >> 3;
-  return r | g | b;
-};
-
 const CMD = {
   SWRESET: 0x01,
   SLPIN:   0x10,

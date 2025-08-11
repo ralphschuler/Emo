@@ -1,4 +1,5 @@
 export * from "./st7789.ts";
+export * from "st7789-color";
 
 import { ST7789, type ST7789Rotation } from "./st7789.ts";
 import { runDemo } from "./demo.ts";
