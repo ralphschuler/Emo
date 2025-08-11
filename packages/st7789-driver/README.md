@@ -1,5 +1,5 @@
-Ein ST7735-TFT-Treiber ausschließlich für **Bun** via FFI.
-Diese Bibliothek erlaubt die direkte Ansteuerung eines ST7735-Displays auf einem Raspberry Pi **ohne Node.js** und **ohne rpio**, nur mit Bun, SPI (`/dev/spidev*`) und GPIO via `libgpiod`.
+Ein ST7789-TFT-Treiber ausschließlich für **Bun** via FFI.
+Diese Bibliothek erlaubt die direkte Ansteuerung eines ST7789-Displays auf einem Raspberry Pi **ohne Node.js** und **ohne rpio**, nur mit Bun, SPI (`/dev/spidev*`) und GPIO via `libgpiod`.
 
 ---
 
@@ -23,7 +23,7 @@ Diese Bibliothek erlaubt die direkte Ansteuerung eines ST7735-Displays auf einem
 
 ### Hardware
 - Raspberry Pi (getestet mit Raspberry Pi 3B+)
-- ST7735-basiertes TFT-Display (z. B. Waveshare 1.8" oder 2.0")
+- ST7789-basiertes TFT-Display (z. B. Waveshare 2.0" oder 2.4")
 - Verdrahtung entsprechend der SPI-Schnittstelle und GPIOs
 
 ### Software
@@ -39,8 +39,8 @@ sudo raspi-config   # SPI aktivieren → reboot
 
 ```bash
 # Repository klonen
-git clone https://github.com/yourname/st7735-bun.git
-cd st7735-bun
+git clone https://github.com/yourname/st7789-bun.git
+cd st7789-bun
 
 # Abhängigkeiten installieren
 npm install
@@ -55,9 +55,9 @@ npm run build
 
 ### Beispiel (TypeScript)
 ```ts
-import { ST7735, toRGB565, rgba } from "@your-scope/st7735-bun";
+import { ST7789, toRGB565, rgba } from "st7789-driver";
 
-const lcd = new ST7735({
+const lcd = new ST7789({
   width: 128,
   height: 160,
   device: "/dev/spidev0.0",
